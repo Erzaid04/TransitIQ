@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TransitIQ — Train Delay Predictor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0a0e1a;
+      --surface: #111827;
+      --surface2: #1a2235;
+      --border: #1e2d45;
+      --accent: #3b82f6;
+      --accent2: #06b6d4;
+      --green: #10b981;
+      --yellow: #f59e0b;
+      --red: #ef4444;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --mono: 'Space Mono', monospace;
+      --sans: 'DM Sans', sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(59,130,246,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Glow blob */
+    body::after {
+      content: '';
+      position: fixed;
+      top: -200px;
+      right: -200px;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* NAV */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 40px;
+      background: rgba(10,14,26,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      font-family: var(--mono);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+
+    .logo span { color: var(--text); }
+
+    .nav-badge {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    /* MAIN */
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 48px 24px;
+    }
+
+    /* HERO */
+    .hero {
+      text-align: center;
+      margin-bottom: 56px;
+      animation: fadeUp 0.6s ease both;
+    }
+
+    .hero-tag {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      border: 1px solid rgba(59,130,246,0.3);
+      background: rgba(59,130,246,0.08);
+      padding: 6px 14px;
+      border-radius: 20px;
+      margin-bottom: 20px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-family: var(--mono);
+      font-size: clamp(32px, 5vw, 52px);
+      font-weight: 700;
+      line-height: 1.1;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    h1 .accent { color: var(--accent); }
+
+    .hero-sub {
+      color: var(--muted);
+      font-size: 16px;
+      font-weight: 300;
+      max-width: 480px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* STATS CARDS */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 40px;
+      animation: fadeUp 0.6s 0.1s ease both;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+
+    .stat-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .stat-card:hover::before { opacity: 1; }
+
+    .stat-label {
+      font-size: 11px;
+      font-family: var(--mono);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-family: var(--mono);
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .stat-value.green { color: var(--green); }
+    .stat-value.blue { color: var(--accent); }
+    .stat-value.cyan { color: var(--accent2); }
+
+    .stat-desc {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* MAIN GRID */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 24px;
+      animation: fadeUp 0.6s 0.2s ease both;
+    }
+
+    @media (max-width: 900px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    /* FORM CARD */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+    }
+
+    .card-title {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group.full { grid-column: 1 / -1; }
+
+    label {
+      font-size: 11px;
+      font-family: var(--mono);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    input, select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      appearance: none;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+    }
+
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 36px;
+      cursor: pointer;
+    }
+
+    select option { background: var(--surface2); }
+
+    .predict-btn {
+      margin-top: 24px;
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none;
+      border-radius: 10px;
+      color: white;
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .predict-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .predict-btn:active { transform: translateY(0); }
+
+    .predict-btn.loading {
+      pointer-events: none;
+      opacity: 0.7;
+    }
+
+    /* RESULT PANEL */
+    .result-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      text-align: center;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+      transition: border-color 0.4s;
+    }
+
+    .result-card.has-result { border-color: var(--accent); }
+
+    .result-placeholder {
+      color: var(--muted);
+      font-size: 13px;
+      font-family: var(--mono);
+    }
+
+    .result-placeholder .icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+      opacity: 0.3;
+    }
+
+    .result-minutes {
+      font-family: var(--mono);
+      font-size: 64px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 8px;
+      animation: countUp 0.5s ease both;
+    }
+
+    .result-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+    }
+
+    .delay-badge {
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .delay-low { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .delay-medium { background: rgba(245,158,11,0.15); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+    .delay-high { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+
+    /* INFO CARD */
+    .info-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    .info-row:last-child { border-bottom: none; }
+
+    .info-key {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .info-val {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    /* FOOTER */
+    footer {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: 32px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      border-top: 1px solid var(--border);
+      margin-top: 48px;
+    }
+
+    footer span { color: var(--accent); }
+
+    /* ANIMATIONS */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes countUp {
+      from { opacity: 0; transform: scale(0.8); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* LOADER */
+    .loader {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ERROR */
+    .error-msg {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: var(--red);
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-top: 12px;
+      font-family: var(--mono);
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="logo">Transit<span>IQ</span></div>
+    <div class="nav-badge">ML Prediction Engine v1.0</div>
+  </nav>
+
+  <main>
+    <!-- HERO -->
+    <div class="hero">
+      <div class="hero-tag">🚂 AI-Powered Railway Intelligence</div>
+      <h1>Predict Train <span class="accent">Delays</span><br/>Before They Happen</h1>
+      <p class="hero-sub">Enter journey details below and get an instant ML-powered delay prediction using Random Forest.</p>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Model</div>
+        <div class="stat-value blue">RF</div>
+        <div class="stat-desc">Random Forest Regressor</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Test MAE</div>
+        <div class="stat-value green">29.88</div>
+        <div class="stat-desc">Minutes error on test data</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Training Data</div>
+        <div class="stat-value cyan">2,878</div>
+        <div class="stat-desc">Records used for training</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Features</div>
+        <div class="stat-value blue">16</div>
+        <div class="stat-desc">Encoded input features</div>
+      </div>
+    </div>
+
+    <!-- MAIN GRID -->
+    <div class="main-grid">
+
+      <!-- FORM -->
+      <div class="card">
+        <div class="card-title">Prediction Input</div>
+        <div class="form-grid">
+
+          <div class="form-group full">
+            <label>Distance Between Stations (km)</label>
+            <input type="number" id="distance" placeholder="e.g. 150" min="1" max="2000"/>
+          </div>
+
+          <div class="form-group">
+            <label>Weather Condition</label>
+            <select id="weather">
+              <option value="">Select weather</option>
+              <option value="Clear">Clear</option>
+              <option value="Rainy">Rainy</option>
+              <option value="Foggy">Foggy</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Day of Week</label>
+            <select id="day_of_week">
+              <option value="">Select day</option>
+              <option value="Monday">Monday</option>
+              <option value="Tuesday">Tuesday</option>
+              <option value="Wednesday">Wednesday</option>
+              <option value="Thursday">Thursday</option>
+              <option value="Friday">Friday</option>
+              <option value="Saturday">Saturday</option>
+              <option value="Sunday">Sunday</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Time of Day</label>
+            <select id="time_of_day">
+              <option value="">Select time</option>
+              <option value="Morning">Morning</option>
+              <option value="Afternoon">Afternoon</option>
+              <option value="Evening">Evening</option>
+              <option value="Night">Night</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Train Type</label>
+            <select id="train_type">
+              <option value="">Select type</option>
+              <option value="Express">Express</option>
+              <option value="Superfast">Superfast</option>
+              <option value="Local">Local</option>
+            </select>
+          </div>
+
+          <div class="form-group full">
+            <label>Route Congestion</label>
+            <select id="route_congestion">
+              <option value="">Select congestion level</option>
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+            </select>
+          </div>
+
+        </div>
+
+        <button class="predict-btn" onclick="predict()" id="predictBtn">
+          Predict Delay
+        </button>
+        <div class="error-msg" id="errorMsg"></div>
+      </div>
+
+      <!-- RESULT PANEL -->
+      <div class="result-panel">
+
+        <!-- RESULT -->
+        <div class="result-card" id="resultCard">
+          <div class="result-placeholder" id="placeholder">
+            <div class="icon">🚂</div>
+            Fill in the form and click<br/>Predict Delay to get results
+          </div>
+          <div id="resultContent" style="display:none; text-align:center;">
+            <div class="result-label">Predicted Delay</div>
+            <div class="result-minutes" id="resultMinutes">--</div>
+            <div class="result-label">minutes</div>
+            <div class="delay-badge" id="delayBadge">--</div>
+          </div>
+        </div>
+
+        <!-- INPUT SUMMARY -->
+        <div class="info-card" id="summaryCard">
+          <div class="card-title">Journey Summary</div>
+          <div class="info-row">
+            <span class="info-key">Distance</span>
+            <span class="info-val" id="s-distance">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Weather</span>
+            <span class="info-val" id="s-weather">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Day</span>
+            <span class="info-val" id="s-day">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Time</span>
+            <span class="info-val" id="s-time">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Train Type</span>
+            <span class="info-val" id="s-train">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Congestion</span>
+            <span class="info-val" id="s-congestion">—</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Built with <span>Python · FastAPI · Scikit-learn · Random Forest</span> &nbsp;|&nbsp; TransitIQ v1.0 &nbsp;|&nbsp; By Zaid Kakar
+  </footer>
+
+  <script>
+    async function predict() {
+      const distance = document.getElementById('distance').value;
+      const weather = document.getElementById('weather').value;
+      const day_of_week = document.getElementById('day_of_week').value;
+      const time_of_day = document.getElementById('time_of_day').value;
+      const train_type = document.getElementById('train_type').value;
+      const route_congestion = document.getElementById('route_congestion').value;
+
+      // Validation
+      const errorMsg = document.getElementById('errorMsg');
+      errorMsg.style.display = 'none';
+
+      if (!distance || !weather || !day_of_week || !time_of_day || !train_type || !route_congestion) {
+        errorMsg.textContent = 'ERROR: Please fill in all fields before predicting.';
+        errorMsg.style.display = 'block';
+        return;
+      }
+
+      // Loading state
+      const btn = document.getElementById('predictBtn');
+      btn.classList.add('loading');
+      btn.innerHTML = '<span class="loader"></span> Predicting...';
+
+      // Update summary
+      document.getElementById('s-distance').textContent = distance + ' km';
+      document.getElementById('s-weather').textContent = weather;
+      document.getElementById('s-day').textContent = day_of_week;
+      document.getElementById('s-time').textContent = time_of_day;
+      document.getElementById('s-train').textContent = train_type;
+      document.getElementById('s-congestion').textContent = route_congestion;
+
+      try {
+        const response = await fetch('http://127.0.0.1:8000/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            distance: parseFloat(distance),
+            weather: weather,
+            day_of_week: day_of_week,
+            time_of_day: time_of_day,
+            train_type: train_type,
+            route_congestion: route_congestion
+          })
+        });
+
+        const data = await response.json();
+        const delay = data.predicted_delay_minutes || data.Predicted_delay_minutes;
+
+        // Show result
+        document.getElementById('placeholder').style.display = 'none';
+        document.getElementById('resultContent').style.display = 'block';
+        document.getElementById('resultCard').classList.add('has-result');
+        document.getElementById('resultMinutes').textContent = delay;
+
+        // Delay badge
+        const badge = document.getElementById('delayBadge');
+        if (delay < 30) {
+          badge.textContent = '✓ Minor Delay';
+          badge.className = 'delay-badge delay-low';
+        } else if (delay < 60) {
+          badge.textContent = '⚠ Moderate Delay';
+          badge.className = 'delay-badge delay-medium';
+        } else {
+          badge.textContent = '✕ Severe Delay';
+          badge.className = 'delay-badge delay-high';
+        }
+
+      } catch (err) {
+        errorMsg.textContent = 'ERROR: Could not connect to API. Make sure FastAPI server is running on port 8000.';
+        errorMsg.style.display = 'block';
+      }
+
+      // Reset button
+      btn.classList.remove('loading');
+      btn.innerHTML = 'Predict Delay';
+    }
+  </script>
+
+</body>
+</html>

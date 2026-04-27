@@ -1,48 +1,67 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 import pickle
 import pandas as pd
-import numpy as np
-from pydantic import BaseModel
+import traceback
 
 app = FastAPI()
 
-with open('model.pkl', 'rb') as f:
-    model = pickle.load(f)
-    
-with open('feature_columns.pkl','rb') as f:
-    feature_columns = pickle.load(f)
-    
-@app.get("/")
-def home():
-    return {"Message":"TransitIQ API is running"}
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+# Load model and feature columns
+with open("model.pkl", "rb") as f:
+    model = pickle.load(f)
+
+with open("feature_columns.pkl", "rb") as f:
+    feature_columns = pickle.load(f)
+
+# Input schema
 class TrainFeatures(BaseModel):
     distance: float
     weather: str
     day_of_week: str
-    train_type: str
     time_of_day: str
+    train_type: str
     route_congestion: str
+
+
     
+# Home route - serve frontend
+@app.get("/")
+def home():
+    with open("templates/TransitIQ_dashboard.html", "r") as f:
+        content = f.read()
+    return HTMLResponse(content=content)
+
+# Prediction endpoint
 @app.post("/predict")
 def predict(features: TrainFeatures):
     try:
         input_data = {
-            'Distance_Between_Stations_km': features.distance,
-            'Weather_Conditions': features.weather,
-            'Day_of_Week': features.day_of_week,
-            'Train_type': features.train_type,
-            'Time_of_Day': features.time_of_day,
-            'Route_Congestion': features.route_congestion
+            "distance": features.distance,
+            "weather": features.weather.strip().title(),
+            "day": features.day_of_week.strip().title(),
+            "time": features.time_of_day.strip().title(),
+            "train": features.train_type.strip().title(),
+            "congestion": features.route_congestion.strip().title()
         }
-        
-        df_input = pd.DataFrame([input_data])
-        print("Input DF: ",df_input)
-        df_encoded = pd.get_dummies(df_input)
-        print("Encoded DF columns: ",df_encoded.columns.tolist())
-        df_encoded = df_encoded.reindex(columns=feature_columns,fill_value=0)
-        print("Reindexed shape: ",df_encoded.shape)
-        prediction = model.predict(df_encoded)
-        return {"Predicted_delay_minutes":round(prediction[0], 2)}
+
+        df = pd.DataFrame([input_data])
+        print("INPUT:", df)
+
+        # 🚀 NO encoding here
+        prediction = model.predict(df)
+
+        return {"predicted_delay_minutes": round(float(prediction[0]), 2)}
+
     except Exception as e:
+        traceback.print_exc()
         return {"error": str(e)}
