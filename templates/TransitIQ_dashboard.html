@@ -474,6 +474,29 @@
       font-family: var(--mono);
       display: none;
     }
+    .history-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.history-table th {
+  text-align: left;
+  padding: 12px;
+  color: var(--muted);
+  font-family: var(--mono);
+  border-bottom: 1px solid var(--border);
+}
+
+.history-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-table tr:hover {
+  background: rgba(59,130,246,0.05);
+}
   </style>
 </head>
 <body>
@@ -486,7 +509,7 @@
   <main>
     <!-- HERO -->
     <div class="hero">
-      <div class="hero-tag">🚂 AI-Powered Railway Intelligence</div>
+      <div class="hero-tag">AI-Powered Railway Intelligence</div>
       <h1>Predict Train <span class="accent">Delays</span><br/>Before They Happen</h1>
       <p class="hero-sub">Enter journey details below and get an instant ML-powered delay prediction using Random Forest.</p>
     </div>
@@ -597,7 +620,7 @@
         <!-- RESULT -->
         <div class="result-card" id="resultCard">
           <div class="result-placeholder" id="placeholder">
-            <div class="icon">🚂</div>
+            <div class="icon">Train</div>
             Fill in the form and click<br/>Predict Delay to get results
           </div>
           <div id="resultContent" style="display:none; text-align:center;">
@@ -613,32 +636,41 @@
           <div class="card-title">Journey Summary</div>
           <div class="info-row">
             <span class="info-key">Distance</span>
-            <span class="info-val" id="s-distance">—</span>
+            <span class="info-val" id="s-distance">-</span>
           </div>
           <div class="info-row">
             <span class="info-key">Weather</span>
-            <span class="info-val" id="s-weather">—</span>
+            <span class="info-val" id="s-weather">-</span>
           </div>
           <div class="info-row">
             <span class="info-key">Day</span>
-            <span class="info-val" id="s-day">—</span>
+            <span class="info-val" id="s-day">-</span>
           </div>
           <div class="info-row">
             <span class="info-key">Time</span>
-            <span class="info-val" id="s-time">—</span>
+            <span class="info-val" id="s-time">-</span>
           </div>
           <div class="info-row">
             <span class="info-key">Train Type</span>
-            <span class="info-val" id="s-train">—</span>
+            <span class="info-val" id="s-train">-</span>
           </div>
           <div class="info-row">
             <span class="info-key">Congestion</span>
-            <span class="info-val" id="s-congestion">—</span>
+            <span class="info-val" id="s-congestion">-</span>
           </div>
         </div>
 
       </div>
     </div>
+    <div class="card" style="margin-top: 24px;">
+  <div class="card-title">Prediction History</div>
+
+  <button class="predict-btn" onclick="loadHistory()" style="margin-bottom: 16px;">
+    Load History
+  </button>
+<table id="historyTable" class="history-table">
+</table>
+</div>
   </main>
 
   <footer>
@@ -699,17 +731,18 @@
         document.getElementById('resultContent').style.display = 'block';
         document.getElementById('resultCard').classList.add('has-result');
         document.getElementById('resultMinutes').textContent = delay;
+        loadHistory();
 
         // Delay badge
         const badge = document.getElementById('delayBadge');
         if (delay < 30) {
-          badge.textContent = '✓ Minor Delay';
+          badge.textContent = 'Minor Delay';
           badge.className = 'delay-badge delay-low';
         } else if (delay < 60) {
-          badge.textContent = '⚠ Moderate Delay';
+          badge.textContent = 'Moderate Delay';
           badge.className = 'delay-badge delay-medium';
         } else {
-          badge.textContent = '✕ Severe Delay';
+          badge.textContent = 'Severe Delay';
           badge.className = 'delay-badge delay-high';
         }
 
@@ -722,6 +755,47 @@
       btn.classList.remove('loading');
       btn.innerHTML = 'Predict Delay';
     }
+async function loadHistory() {
+    const response = await fetch("/history");
+    const data = await response.json();
+
+    const table = document.getElementById("historyTable");
+
+    table.innerHTML = `
+<tr>
+    <th>ID</th>
+    <th>Distance</th>
+    <th>Weather</th>
+    <th>Day</th>
+    <th>Time</th>
+    <th>Train</th>
+    <th>Congestion</th>
+    <th>Delay</th>
+</tr>
+`;
+
+    data.history.forEach(item => {
+        table.innerHTML += `
+            <tr>
+                <td>${item.id}</td>
+                <td>${item.distance}</td>
+                <td>${item.weather}</td>
+                <td>${item.day_of_week}</td>
+                <td>${item.time_of_day}</td>
+                <td>${item.train_type}</td>
+                <td>${item.route_congestion}</td>
+                <td style="color:${getColor(item.predicted_delay)}; font-weight:600;">
+                ${item.predicted_delay} min
+                </td>
+            </tr>
+        `;
+    });
+}
+function getColor(delay) {
+  if (delay < 30) return "#10b981";
+  if (delay < 60) return "#f59e0b";
+  return "#ef4444";
+}
   </script>
 
 </body>

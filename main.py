@@ -5,10 +5,60 @@ from pydantic import BaseModel
 import pickle
 import pandas as pd
 import traceback
+import sqlite3
+from datetime import datetime
 
 app = FastAPI()
 
-# CORS
+# ---------------------- DATABASE SETUP ----------------------
+
+def init_db():
+    conn = sqlite3.connect("transitiq.db", check_same_thread=False)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS prediction_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            distance REAL,
+            weather TEXT,
+            day_of_week TEXT,
+            time_of_day TEXT,
+            train_type TEXT,
+            route_congestion TEXT,
+            predicted_delay_minutes REAL,
+            created_at TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+# Call DB init at startup
+init_db()
+
+def save_prediction(features, prediction):
+    conn = sqlite3.connect("transitiq.db", check_same_thread=False)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO prediction_history 
+        VALUES (NULL,?,?,?,?,?,?,?,?)
+    """, (
+        features.distance,
+        features.weather,
+        features.day_of_week,
+        features.time_of_day,
+        features.train_type,
+        features.route_congestion,
+        prediction,
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ))
+
+    conn.commit()
+    conn.close()
+
+# ---------------------- CORS ----------------------
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,14 +66,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load model and feature columns
+# ---------------------- LOAD MODEL ----------------------
+
 with open("model.pkl", "rb") as f:
     model = pickle.load(f)
 
 with open("feature_columns.pkl", "rb") as f:
     feature_columns = pickle.load(f)
 
-# Input schema
+# ---------------------- INPUT SCHEMA ----------------------
+
 class TrainFeatures(BaseModel):
     distance: float
     weather: str
@@ -32,16 +84,16 @@ class TrainFeatures(BaseModel):
     train_type: str
     route_congestion: str
 
+# ---------------------- ROUTES ----------------------
 
-    
-# Home route - serve frontend
+# Home route
 @app.get("/")
 def home():
     with open("templates/TransitIQ_dashboard.html", "r") as f:
         content = f.read()
     return HTMLResponse(content=content)
 
-# Prediction endpoint
+# Prediction route
 @app.post("/predict")
 def predict(features: TrainFeatures):
     try:
@@ -55,13 +107,46 @@ def predict(features: TrainFeatures):
         }
 
         df = pd.DataFrame([input_data])
-        print("INPUT:", df)
 
-        # 🚀 NO encoding here
+        print("FINAL DF:", df)  # debug
+
         prediction = model.predict(df)
+        result = round(float(prediction[0]), 2)
 
-        return {"predicted_delay_minutes": round(float(prediction[0]), 2)}
+        save_prediction(features, result)
+
+        return {"predicted_delay_minutes": result}
 
     except Exception as e:
         traceback.print_exc()
         return {"error": str(e)}
+# History route
+@app.get("/history")
+def get_history():
+    conn = sqlite3.connect("transitiq.db", check_same_thread=False)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM prediction_history 
+        ORDER BY id DESC 
+        LIMIT 10
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    history = []
+    for row in rows:
+        history.append({
+            "id": row[0],
+            "distance": row[1],
+            "weather": row[2],
+            "day_of_week": row[3],
+            "time_of_day": row[4],
+            "train_type": row[5],
+            "route_congestion": row[6],
+            "predicted_delay": row[7],
+            "created_at": row[8]
+        })
+
+    return {"history": history}
